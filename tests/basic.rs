@@ -52,6 +52,21 @@ fn rust_i32_counter() -> TestResult {
     Ok(())
 }
 
+#[test]
+fn c_i32_counter() -> TestResult {
+    let wasm = include_bytes!("../wasm/c_i32_counter.wasm");
+    let wasm = wasm_submemory::rewrite(wasm, SUBMEMORY_SIZE as i32)?;
+    let mut vm = VM::new(&wasm)?;
+    vm.set_memory_size(10 * SUBMEMORY_SIZE)?;
+    for i in 1..=10 {
+        for j in 0..10 {
+            vm.call("set_base", &[Value::I32(j * SUBMEMORY_SIZE as i32)])?;
+            assert_eq!(returned_int(&vm.call("entry", &[])?)?, i);
+        }
+    }
+    Ok(())
+}
+
 fn parse_wat(wat: &str) -> anyhow::Result<Vec<u8>> {
     Ok(wasmer::wat2wasm(wat.as_bytes())?.to_vec())
 }
