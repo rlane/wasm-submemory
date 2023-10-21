@@ -15,3 +15,11 @@ for SRC in *.c; do
                 -Wl,--no-entry \
                 "$SRC" -o "$DST"
 done
+
+for SRC in *.zig; do
+        DST="${SRC%.zig}.wasm"
+        zig build-lib -O ReleaseSmall -target wasm32-freestanding --export=entry -dynamic \
+                --export-memory --initial-memory=65536 --stack 16384 \
+                "$SRC"
+        rm "${DST}.o"
+done
