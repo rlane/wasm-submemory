@@ -101,6 +101,23 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
         exempt_functions.push(id);
     }
 
+    // Create a translate_offset(offset: i32) -> i32 function.
+    {
+        let mut func = FunctionBuilder::new(&mut module.types, &[ValType::I32], &[ValType::I32]);
+        let offset = module.locals.add(ValType::I32);
+        func.func_body()
+            .global_get(index_global)
+            .i32_const(submemory_size as i32)
+            .binop(BinaryOp::I32Mul)
+            .i32_const(headroom as i32 + initial_pages as i32 * WASM_PAGE_SIZE as i32)
+            .binop(BinaryOp::I32Add)
+            .local_get(offset)
+            .binop(BinaryOp::I32Add);
+        let id = func.finish(vec![offset], &mut module.funcs);
+        module.exports.add("translate_offset", id);
+        exempt_functions.push(id);
+    }
+
     // Create a fake_memory_grow(i32) -> i32 function.
     // TODO return -1 if the submemory is full
     let fake_memory_grow = {

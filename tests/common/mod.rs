@@ -10,10 +10,10 @@ pub fn parse_wat(wat: &str) -> anyhow::Result<Vec<u8>> {
 }
 
 pub struct VM {
-    store: Store,
-    instance: Instance,
-    memory: wasmer::Memory,
-    initial_contents: Vec<u8>,
+    pub store: Store,
+    pub instance: Instance,
+    pub memory: wasmer::Memory,
+    pub initial_contents: Vec<u8>,
 }
 
 impl VM {
@@ -38,5 +38,12 @@ impl VM {
             .exports
             .get_function(func_name)?
             .call(&mut self.store, args)?)
+    }
+
+    pub fn translate_offset(&mut self, offset: i32) -> anyhow::Result<i32> {
+        match *self.call("translate_offset", &[Value::I32(offset)])? {
+            [Value::I32(offset)] => Ok(offset),
+            _ => Err(anyhow::anyhow!("translate_offset failed")),
+        }
     }
 }
