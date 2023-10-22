@@ -1,13 +1,5 @@
 use walrus::{ir::*, FunctionBuilder, GlobalId, InitExpr, LocalFunction, ValType};
 
-// TODO need to support more types
-struct SavedValues {
-    val_i32: LocalId,
-    val_f32: LocalId,
-    val_i64: LocalId,
-    val_f64: LocalId,
-}
-
 pub fn rewrite(wasm: &[u8], limit: i32) -> anyhow::Result<Vec<u8>> {
     let mut module = walrus::Module::from_buffer(wasm)?;
     let base_global = module
@@ -23,13 +15,7 @@ pub fn rewrite(wasm: &[u8], limit: i32) -> anyhow::Result<Vec<u8>> {
         module.exports.add("set_base", set_base);
     }
 
-    let saved_values = SavedValues {
-        val_i32: module.locals.add(ValType::I32),
-        val_f32: module.locals.add(ValType::F32),
-        val_i64: module.locals.add(ValType::I64),
-        val_f64: module.locals.add(ValType::F64),
-    };
-
+    let saved_values = SavedValues::new(&mut module);
     for (_, func) in module.funcs.iter_local_mut() {
         rewrite_function(func, base_global, limit, &saved_values)?;
     }
@@ -114,16 +100,7 @@ fn rewrite_block(
                 use walrus::ir::Value::*;
                 let mut new_store = store.clone();
                 new_store.arg.offset = 0;
-                // TODO need to support more types
-                let local = match store.kind {
-                    walrus::ir::StoreKind::I32 { .. } => saved_values.val_i32,
-                    walrus::ir::StoreKind::F32 => saved_values.val_f32,
-                    walrus::ir::StoreKind::I64 { .. } => saved_values.val_i64,
-                    walrus::ir::StoreKind::F64 { .. } => saved_values.val_f64,
-                    _ => {
-                        anyhow::bail!("unsupported store kind {:?}", store.kind);
-                    }
-                };
+                let local = saved_values.get(store.kind)?;
                 let bounds_checked_instrs = &[
                     (Instr::LocalSet(LocalSet { local }), InstrLocId::default()),
                     (
@@ -175,4 +152,35 @@ fn rewrite_block(
 
     block.instrs = new_instrs;
     Ok(())
+}
+
+// TODO need to support more types
+struct SavedValues {
+    val_i32: LocalId,
+    val_f32: LocalId,
+    val_i64: LocalId,
+    val_f64: LocalId,
+}
+
+impl SavedValues {
+    fn new(module: &mut walrus::Module) -> Self {
+        Self {
+            val_i32: module.locals.add(ValType::I32),
+            val_f32: module.locals.add(ValType::F32),
+            val_i64: module.locals.add(ValType::I64),
+            val_f64: module.locals.add(ValType::F64),
+        }
+    }
+
+    fn get(&self, store_kind: StoreKind) -> anyhow::Result<LocalId> {
+        Ok(match store_kind {
+            walrus::ir::StoreKind::I32 { .. } => self.val_i32,
+            walrus::ir::StoreKind::F32 => self.val_f32,
+            walrus::ir::StoreKind::I64 { .. } => self.val_i64,
+            walrus::ir::StoreKind::F64 { .. } => self.val_f64,
+            _ => {
+                anyhow::bail!("unsupported store kind {:?}", store_kind);
+            }
+        })
+    }
 }
