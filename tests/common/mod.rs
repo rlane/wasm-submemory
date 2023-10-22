@@ -39,24 +39,4 @@ impl VM {
             .get_function(func_name)?
             .call(&mut self.store, args)?)
     }
-
-    pub fn set_memory_size(&mut self, size: u64) -> anyhow::Result<()> {
-        if size % WASM_PAGE_SIZE != 0 {
-            anyhow::bail!("memory size must be a multiple of {}", WASM_PAGE_SIZE);
-        }
-        let current_size = self.memory.view(&mut self.store).data_size();
-        if size < current_size {
-            anyhow::bail!("cannot shrink memory from {} to {}", current_size, size);
-        }
-        let delta_pages = (size - current_size) / WASM_PAGE_SIZE;
-        self.memory.grow(&mut self.store, delta_pages as u32)?;
-        Ok(())
-    }
-
-    pub fn init_submemory(&mut self, slot: i32) -> anyhow::Result<()> {
-        let view = self.memory.view(&mut self.store);
-        let offset = slot as u64 * SUBMEMORY_SIZE;
-        view.write(offset, &self.initial_contents)?;
-        Ok(())
-    }
 }

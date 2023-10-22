@@ -16,7 +16,15 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
     let base_global = module
         .globals
         .add_local(ValType::I32, true, InitExpr::Value(Value::I32(0)));
+    let index_global = module
+        .globals
+        .add_local(ValType::I32, true, InitExpr::Value(Value::I32(0)));
+    let count_global = module
+        .globals
+        .add_local(ValType::I32, true, InitExpr::Value(Value::I32(0)));
 
+    let memory_id;
+    let initial_pages;
     {
         let memory = module.memories.iter_mut().next().unwrap();
         memory.maximum = None;
@@ -30,21 +38,10 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
                 _ => {}
             }
         }
+        initial_pages = memory.initial as u64;
+        memory_id = memory.id();
         memory.initial += HEADROOM as u32 / WASM_PAGE_SIZE as u32;
     };
-
-    // Create a set_base() function.
-    {
-        let mut func = FunctionBuilder::new(&mut module.types, &[ValType::I32], &[]);
-        let base = module.locals.add(ValType::I32);
-        func.func_body()
-            .local_get(base)
-            .i32_const(HEADROOM as i32)
-            .binop(BinaryOp::I32Add)
-            .global_set(base_global);
-        let set_base = func.finish(vec![base], &mut module.funcs);
-        module.exports.add("set_base", set_base);
-    }
 
     let saved_values = SavedValues::new(&mut module);
     let context = Context {
@@ -54,6 +51,62 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
     };
     for (_, func) in module.funcs.iter_local_mut() {
         rewrite_function(func, &context)?;
+    }
+
+    // Create a select_submemory(index: i32) function.
+    {
+        let mut func = FunctionBuilder::new(&mut module.types, &[ValType::I32], &[]);
+        let index = module.locals.add(ValType::I32);
+        func.func_body()
+            .local_get(index)
+            .global_set(index_global)
+            .local_get(index)
+            .i32_const(submemory_size as i32)
+            .binop(BinaryOp::I32Mul)
+            .i32_const(HEADROOM as i32 + initial_pages as i32 * WASM_PAGE_SIZE as i32)
+            .binop(BinaryOp::I32Add)
+            .global_set(base_global);
+        module.exports.add(
+            "select_submemory",
+            func.finish(vec![index], &mut module.funcs),
+        );
+    }
+
+    // Create an add_submemory() -> i32 function.
+    {
+        let mut func = FunctionBuilder::new(&mut module.types, &[], &[ValType::I32]);
+        func.func_body()
+            // prev_pages = memory.grow(submemory_size / WASM_PAGE_SIZE)
+            .i32_const(submemory_size as i32 / WASM_PAGE_SIZE as i32)
+            .memory_grow(memory_id)
+            // memory.copy(prev_pages * WASM_PAGE_SIZE, HEADROOM, initial_pages * WASM_PAGE_SIZE)
+            .i32_const(WASM_PAGE_SIZE as i32)
+            .binop(BinaryOp::I32Mul)
+            .i32_const(HEADROOM as i32)
+            .i32_const(initial_pages as i32 * WASM_PAGE_SIZE as i32)
+            .memory_copy(memory_id, memory_id)
+            // allocated_pages[count] = initial_pages
+            .global_get(count_global)
+            .i32_const(4)
+            .binop(BinaryOp::I32Mul)
+            .i32_const(initial_pages as i32)
+            .store(
+                memory_id,
+                StoreKind::I32 { atomic: false },
+                MemArg {
+                    align: 4,
+                    offset: 0,
+                },
+            )
+            // return count++
+            .global_get(count_global)
+            .global_get(count_global)
+            .i32_const(1)
+            .binop(BinaryOp::I32Add)
+            .global_set(count_global);
+        module
+            .exports
+            .add("add_submemory", func.finish(vec![], &mut module.funcs));
     }
 
     Ok(module.emit_wasm())

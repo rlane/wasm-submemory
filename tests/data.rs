@@ -47,10 +47,12 @@ fn data() -> TestResult {
     for testcase in testcases {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE)?;
         let mut vm = VM::new(&wasm)?;
-        vm.set_memory_size(10 * SUBMEMORY_SIZE + wasm_submemory::HEADROOM)?;
         for i in 0..10 {
-            vm.init_submemory(i)?;
-            vm.call("set_base", &[Value::I32(i * SUBMEMORY_SIZE as i32)])?;
+            let ret = vm.call("add_submemory", &[])?;
+            assert_eq!(*ret, [Value::I32(i)], "{} {}", testcase.name, i);
+        }
+        for i in 0..10 {
+            vm.call("select_submemory", &[Value::I32(i)])?;
             let ret = vm.call("entry", &[])?;
             assert_eq!(*ret, [Value::I32(42)], "{} {}", testcase.name, i);
         }
