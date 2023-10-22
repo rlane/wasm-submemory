@@ -23,7 +23,7 @@ fn allowed() -> TestResult {
   "#,
     )?;
 
-    wasm_submemory::rewrite(&wasm, SUBMEMORY_SIZE as i32)?;
+    wasm_submemory::rewrite(&wasm, SUBMEMORY_SIZE)?;
     Ok(())
 }
 
@@ -49,6 +49,6 @@ fn denied() -> TestResult {
   "#,
     )?;
 
-    assert!(wasm_submemory::rewrite(&wasm, SUBMEMORY_SIZE as i32).is_err());
+    assert!(wasm_submemory::rewrite(&wasm, SUBMEMORY_SIZE).is_err());
     Ok(())
 }

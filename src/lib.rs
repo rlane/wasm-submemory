@@ -5,7 +5,7 @@ use walrus::{
 pub const WASM_PAGE_SIZE: u64 = 65536;
 pub const HEADROOM: u64 = 1 << 20;
 
-pub fn rewrite(wasm: &[u8], limit: i32) -> anyhow::Result<Vec<u8>> {
+pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
     let mut module = walrus::Module::from_buffer(wasm)?;
 
     let num_mutable_globals = module.globals.iter().filter(|g| g.mutable).count();
@@ -47,22 +47,28 @@ pub fn rewrite(wasm: &[u8], limit: i32) -> anyhow::Result<Vec<u8>> {
     }
 
     let saved_values = SavedValues::new(&mut module);
+    let context = Context {
+        base_global,
+        submemory_size,
+        saved_values,
+    };
     for (_, func) in module.funcs.iter_local_mut() {
-        rewrite_function(func, base_global, limit, &saved_values)?;
+        rewrite_function(func, &context)?;
     }
 
     Ok(module.emit_wasm())
 }
 
-fn rewrite_function(
-    func: &mut LocalFunction,
+struct Context {
     base_global: GlobalId,
-    limit: i32,
-    saved_values: &SavedValues,
-) -> anyhow::Result<()> {
+    submemory_size: u64,
+    saved_values: SavedValues,
+}
+
+fn rewrite_function(func: &mut LocalFunction, context: &Context) -> anyhow::Result<()> {
     let block_ids: Vec<_> = func.blocks().map(|(block_id, _block)| block_id).collect();
     for block_id in block_ids {
-        rewrite_block(func, block_id, base_global, limit, saved_values)?;
+        rewrite_block(func, block_id, context)?;
     }
     Ok(())
 }
@@ -70,13 +76,11 @@ fn rewrite_function(
 fn rewrite_block(
     func: &mut LocalFunction,
     block_id: InstrSeqId,
-    base_global: GlobalId,
-    limit: i32,
-    saved_values: &SavedValues,
+    context: &Context,
 ) -> anyhow::Result<()> {
     let block = func.block_mut(block_id);
     let block_instrs = &mut block.instrs;
-    let mask = limit - 1;
+    let mask = context.submemory_size - 1;
 
     // TODO need to support more memory instructions
     let mut new_instrs: Vec<(Instr, InstrLocId)> = vec![];
@@ -113,7 +117,7 @@ fn rewrite_block(
                     ),
                     (
                         Instr::GlobalGet(GlobalGet {
-                            global: base_global,
+                            global: context.base_global,
                         }),
                         InstrLocId::default(),
                     ),
@@ -131,7 +135,7 @@ fn rewrite_block(
                 use walrus::ir::Value::*;
                 let mut new_store = store.clone();
                 new_store.arg.offset = 0;
-                let local = saved_values.get(store.kind)?;
+                let local = context.saved_values.get(store.kind)?;
                 let bounds_checked_instrs = &[
                     (Instr::LocalSet(LocalSet { local }), InstrLocId::default()),
                     (
@@ -160,7 +164,7 @@ fn rewrite_block(
                     ),
                     (
                         Instr::GlobalGet(GlobalGet {
-                            global: base_global,
+                            global: context.base_global,
                         }),
                         InstrLocId::default(),
                     ),
