@@ -4,9 +4,9 @@ use walrus::{
 };
 
 pub const WASM_PAGE_SIZE: u64 = 65536;
-pub const HEADROOM: u64 = 1 << 20;
 
 pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
+    let headroom = submemory_size;
     let mut module = walrus::Module::from_buffer(wasm)?;
 
     let num_mutable_globals = module.globals.iter().filter(|g| g.mutable).count();
@@ -33,7 +33,7 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
         for id in data_segment_ids {
             match &mut module.data.get_mut(id).kind {
                 walrus::DataKind::Active(active) => match &mut active.location {
-                    ActiveDataLocation::Absolute(ref mut offset) => *offset += HEADROOM as u32,
+                    ActiveDataLocation::Absolute(ref mut offset) => *offset += headroom as u32,
                     ActiveDataLocation::Relative(_) => todo!("relative data segment"),
                 },
                 _ => {}
@@ -41,7 +41,7 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
         }
         initial_pages = memory.initial as u64;
         memory_id = memory.id();
-        memory.initial += HEADROOM as u32 / WASM_PAGE_SIZE as u32;
+        memory.initial += headroom as u32 / WASM_PAGE_SIZE as u32;
     };
 
     let mut exempt_functions = Vec::new();
@@ -56,7 +56,7 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
             .local_get(index)
             .i32_const(submemory_size as i32)
             .binop(BinaryOp::I32Mul)
-            .i32_const(HEADROOM as i32 + initial_pages as i32 * WASM_PAGE_SIZE as i32)
+            .i32_const(headroom as i32 + initial_pages as i32 * WASM_PAGE_SIZE as i32)
             .binop(BinaryOp::I32Add)
             .global_set(base_global);
         let id = func.finish(vec![index], &mut module.funcs);
@@ -71,10 +71,10 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
             // prev_pages = memory.grow(submemory_size / WASM_PAGE_SIZE)
             .i32_const(submemory_size as i32 / WASM_PAGE_SIZE as i32)
             .memory_grow(memory_id)
-            // memory.copy(prev_pages * WASM_PAGE_SIZE, HEADROOM, initial_pages * WASM_PAGE_SIZE)
+            // memory.copy(prev_pages * WASM_PAGE_SIZE, headroom, initial_pages * WASM_PAGE_SIZE)
             .i32_const(WASM_PAGE_SIZE as i32)
             .binop(BinaryOp::I32Mul)
-            .i32_const(HEADROOM as i32)
+            .i32_const(headroom as i32)
             .i32_const(initial_pages as i32 * WASM_PAGE_SIZE as i32)
             .memory_copy(memory_id, memory_id)
             // allocated_pages[count] = initial_pages
