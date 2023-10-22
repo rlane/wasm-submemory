@@ -4,6 +4,7 @@ use walrus::{ir::*, FunctionBuilder, GlobalId, InitExpr, LocalFunction, ValType}
 struct SavedValues {
     val_i32: LocalId,
     val_f32: LocalId,
+    val_i64: LocalId,
 }
 
 pub fn rewrite(wasm: &[u8], limit: i32) -> anyhow::Result<Vec<u8>> {
@@ -24,6 +25,7 @@ pub fn rewrite(wasm: &[u8], limit: i32) -> anyhow::Result<Vec<u8>> {
     let saved_values = SavedValues {
         val_i32: module.locals.add(ValType::I32),
         val_f32: module.locals.add(ValType::F32),
+        val_i64: module.locals.add(ValType::I64),
     };
 
     for (_, func) in module.funcs.iter_local_mut() {
@@ -114,6 +116,7 @@ fn rewrite_block(
                 let local = match store.kind {
                     walrus::ir::StoreKind::I32 { .. } => saved_values.val_i32,
                     walrus::ir::StoreKind::F32 => saved_values.val_f32,
+                    walrus::ir::StoreKind::I64 { .. } => saved_values.val_i64,
                     _ => {
                         anyhow::bail!("unsupported store kind {:?}", store.kind);
                     }
