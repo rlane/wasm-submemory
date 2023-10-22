@@ -38,15 +38,15 @@ fn i32_counter() -> TestResult {
         },
         Testcase {
             name: "rust",
-            wasm: include_bytes!("../wasm/rust_i32_counter.wasm"),
+            wasm: include_bytes!("../testdata/wasm/rust/i32_counter.wasm"),
         },
         Testcase {
             name: "c",
-            wasm: include_bytes!("../wasm/c_i32_counter.wasm"),
+            wasm: include_bytes!("../testdata/wasm/c/i32_counter.wasm"),
         },
         Testcase {
             name: "zig",
-            wasm: include_bytes!("../wasm/zig_i32_counter.wasm"),
+            wasm: include_bytes!("../testdata/wasm/zig/i32_counter.wasm"),
         },
     ];
 
@@ -99,15 +99,15 @@ fn f32_counter() -> TestResult {
         },
         Testcase {
             name: "rust",
-            wasm: include_bytes!("../wasm/rust_f32_counter.wasm"),
+            wasm: include_bytes!("../testdata/wasm/rust/f32_counter.wasm"),
         },
         Testcase {
             name: "c",
-            wasm: include_bytes!("../wasm/c_f32_counter.wasm"),
+            wasm: include_bytes!("../testdata/wasm/c/f32_counter.wasm"),
         },
         Testcase {
             name: "zig",
-            wasm: include_bytes!("../wasm/zig_f32_counter.wasm"),
+            wasm: include_bytes!("../testdata/wasm/zig/f32_counter.wasm"),
         },
     ];
 
