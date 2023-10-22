@@ -7,11 +7,11 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.75"
-clap = { version = "4.4.6", features = ["derive"] }
-env_logger = "0.10.0"
 log = "0.4.20"
 walrus = { version = "0.19.0", git = "https://github.com/scrtlabs/walrus", rev = "c5777d4" }
-wasmer = "4.2.2"
 
 [dev-dependencies]
 testresult = "0.3.0"
+wasmer = "4.2.2"
+clap = { version = "4.4.6", features = ["derive"] }
+env_logger = "0.10.0"
