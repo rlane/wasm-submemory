@@ -1,4 +1,9 @@
-use walrus::{ir::*, FunctionBuilder, GlobalId, InitExpr, LocalFunction, ValType};
+use walrus::{
+    ir::*, ActiveDataLocation, FunctionBuilder, GlobalId, InitExpr, LocalFunction, ValType,
+};
+
+pub const WASM_PAGE_SIZE: u64 = 65536;
+pub const HEADROOM: u64 = 1 << 20;
 
 pub fn rewrite(wasm: &[u8], limit: i32) -> anyhow::Result<Vec<u8>> {
     let mut module = walrus::Module::from_buffer(wasm)?;
@@ -12,11 +17,31 @@ pub fn rewrite(wasm: &[u8], limit: i32) -> anyhow::Result<Vec<u8>> {
         .globals
         .add_local(ValType::I32, true, InitExpr::Value(Value::I32(0)));
 
+    {
+        let memory = module.memories.iter_mut().next().unwrap();
+        memory.maximum = None;
+        let data_segment_ids = memory.data_segments.iter().cloned().collect::<Vec<_>>();
+        for id in data_segment_ids {
+            match &mut module.data.get_mut(id).kind {
+                walrus::DataKind::Active(active) => match &mut active.location {
+                    ActiveDataLocation::Absolute(ref mut offset) => *offset += HEADROOM as u32,
+                    ActiveDataLocation::Relative(_) => todo!("relative data segment"),
+                },
+                _ => {}
+            }
+        }
+        memory.initial += HEADROOM as u32 / WASM_PAGE_SIZE as u32;
+    };
+
     // Create a set_base() function.
     {
         let mut func = FunctionBuilder::new(&mut module.types, &[ValType::I32], &[]);
         let base = module.locals.add(ValType::I32);
-        func.func_body().local_get(base).global_set(base_global);
+        func.func_body()
+            .local_get(base)
+            .i32_const(HEADROOM as i32)
+            .binop(BinaryOp::I32Add)
+            .global_set(base_global);
         let set_base = func.finish(vec![base], &mut module.funcs);
         module.exports.add("set_base", set_base);
     }

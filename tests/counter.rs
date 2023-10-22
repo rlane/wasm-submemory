@@ -53,12 +53,12 @@ fn i32_counter() -> TestResult {
     for testcase in testcases {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE as i32)?;
         let mut vm = VM::new(&wasm)?;
-        vm.set_memory_size(10 * SUBMEMORY_SIZE)?;
+        vm.set_memory_size(10 * SUBMEMORY_SIZE + wasm_submemory::HEADROOM)?;
         for i in 1..=10 {
             for j in 0..10 {
                 vm.call("set_base", &[Value::I32(j * SUBMEMORY_SIZE as i32)])?;
                 let ret = vm.call("entry", &[])?;
-                assert_eq!(*ret, [Value::I32(i as i32)], "{}", testcase.name);
+                assert_eq!(*ret, [Value::I32(i as i32)], "{} {}", testcase.name, i);
             }
         }
     }
@@ -110,7 +110,7 @@ fn f32_counter() -> TestResult {
     for testcase in testcases {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE as i32)?;
         let mut vm = VM::new(&wasm)?;
-        vm.set_memory_size(10 * SUBMEMORY_SIZE)?;
+        vm.set_memory_size(10 * SUBMEMORY_SIZE + wasm_submemory::HEADROOM)?;
         for i in 1..=10 {
             for j in 0..10 {
                 vm.call("set_base", &[Value::I32(j * SUBMEMORY_SIZE as i32)])?;
@@ -153,7 +153,7 @@ fn i64_counter() -> TestResult {
     for testcase in testcases {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE as i32)?;
         let mut vm = VM::new(&wasm)?;
-        vm.set_memory_size(10 * SUBMEMORY_SIZE)?;
+        vm.set_memory_size(10 * SUBMEMORY_SIZE + wasm_submemory::HEADROOM)?;
         for i in 1..=10 {
             for j in 0..10 {
                 vm.call("set_base", &[Value::I32(j * SUBMEMORY_SIZE as i32)])?;
@@ -196,7 +196,7 @@ fn i64_8_counter() -> TestResult {
     for testcase in testcases {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE as i32)?;
         let mut vm = VM::new(&wasm)?;
-        vm.set_memory_size(10 * SUBMEMORY_SIZE)?;
+        vm.set_memory_size(10 * SUBMEMORY_SIZE + wasm_submemory::HEADROOM)?;
         for i in 1..=10 {
             for j in 0..10 {
                 vm.call("set_base", &[Value::I32(j * SUBMEMORY_SIZE as i32)])?;
@@ -239,7 +239,7 @@ fn f64_counter() -> TestResult {
     for testcase in testcases {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE as i32)?;
         let mut vm = VM::new(&wasm)?;
-        vm.set_memory_size(10 * SUBMEMORY_SIZE)?;
+        vm.set_memory_size(10 * SUBMEMORY_SIZE + wasm_submemory::HEADROOM)?;
         for i in 1..=10 {
             for j in 0..10 {
                 vm.call("set_base", &[Value::I32(j * SUBMEMORY_SIZE as i32)])?;
