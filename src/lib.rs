@@ -150,6 +150,28 @@ fn rewrite_block(
                 ];
                 new_instrs.extend(bounds_checked_instrs.iter().cloned());
             }
+            Instr::MemorySize(_) => {
+                todo!("memory size");
+            }
+            Instr::MemoryGrow(_) => {
+                todo!("memory grow");
+            }
+            Instr::MemoryInit(_) => {
+                todo!("memory init");
+            }
+            Instr::MemoryCopy(_) => {
+                todo!("memory copy");
+            }
+            Instr::MemoryFill(_) => {
+                todo!("memory fill");
+            }
+            Instr::LoadSimd(_)
+            | Instr::Cmpxchg(_)
+            | Instr::AtomicRmw(_)
+            | Instr::AtomicWait(_)
+            | Instr::AtomicNotify(_) => {
+                anyhow::bail!("unsupported instruction: {:?}", instr);
+            }
             _ => {
                 new_instrs.push((instr.clone(), *instr_loc_id));
             }
