@@ -3,6 +3,7 @@ use walrus::{ir::*, FunctionBuilder, GlobalId, InitExpr, LocalFunction, ValType}
 // TODO need to support more types
 struct SavedValues {
     val_i32: LocalId,
+    val_f32: LocalId,
 }
 
 pub fn rewrite(wasm: &[u8], limit: i32) -> anyhow::Result<Vec<u8>> {
@@ -22,10 +23,11 @@ pub fn rewrite(wasm: &[u8], limit: i32) -> anyhow::Result<Vec<u8>> {
 
     let saved_values = SavedValues {
         val_i32: module.locals.add(ValType::I32),
+        val_f32: module.locals.add(ValType::F32),
     };
 
     for (_, func) in module.funcs.iter_local_mut() {
-        rewrite_function(func, base_global, limit, &saved_values);
+        rewrite_function(func, base_global, limit, &saved_values)?;
     }
 
     Ok(module.emit_wasm())
@@ -36,11 +38,12 @@ fn rewrite_function(
     base_global: GlobalId,
     limit: i32,
     saved_values: &SavedValues,
-) {
+) -> anyhow::Result<()> {
     let block_ids: Vec<_> = func.blocks().map(|(block_id, _block)| block_id).collect();
     for block_id in block_ids {
-        rewrite_block(func, block_id, base_global, limit, saved_values);
+        rewrite_block(func, block_id, base_global, limit, saved_values)?;
     }
+    Ok(())
 }
 
 fn rewrite_block(
@@ -49,7 +52,7 @@ fn rewrite_block(
     base_global: GlobalId,
     limit: i32,
     saved_values: &SavedValues,
-) {
+) -> anyhow::Result<()> {
     let block = func.block_mut(block_id);
     let block_instrs = &mut block.instrs;
     let mask = limit - 1;
@@ -107,13 +110,16 @@ fn rewrite_block(
                 use walrus::ir::Value::*;
                 let mut new_store = store.clone();
                 new_store.arg.offset = 0;
+                // TODO need to support more types
+                let local = match store.kind {
+                    walrus::ir::StoreKind::I32 { .. } => saved_values.val_i32,
+                    walrus::ir::StoreKind::F32 => saved_values.val_f32,
+                    _ => {
+                        anyhow::bail!("unsupported store kind {:?}", store.kind);
+                    }
+                };
                 let bounds_checked_instrs = &[
-                    (
-                        Instr::LocalSet(LocalSet {
-                            local: saved_values.val_i32,
-                        }),
-                        InstrLocId::default(),
-                    ),
+                    (Instr::LocalSet(LocalSet { local }), InstrLocId::default()),
                     (
                         Instr::Const(Const {
                             value: I32(store.arg.offset as i32),
@@ -150,12 +156,7 @@ fn rewrite_block(
                         }),
                         InstrLocId::default(),
                     ),
-                    (
-                        Instr::LocalGet(LocalGet {
-                            local: saved_values.val_i32,
-                        }),
-                        InstrLocId::default(),
-                    ),
+                    (Instr::LocalGet(LocalGet { local }), InstrLocId::default()),
                     (Instr::Store(new_store), *instr_loc_id),
                 ];
                 new_instrs.extend(bounds_checked_instrs.iter().cloned());
@@ -167,4 +168,5 @@ fn rewrite_block(
     }
 
     block.instrs = new_instrs;
+    Ok(())
 }
