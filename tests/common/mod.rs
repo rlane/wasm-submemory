@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use wasmer::{imports, Instance, Module, Store, Value};
 
 pub const WASM_PAGE_SIZE: u64 = 65536;
@@ -11,6 +13,7 @@ pub struct VM {
     store: Store,
     instance: Instance,
     memory: wasmer::Memory,
+    initial_contents: Vec<u8>,
 }
 
 impl VM {
@@ -20,10 +23,12 @@ impl VM {
         let module = Module::new(&store, wasm)?;
         let instance = Instance::new(&mut store, &module, &import_object)?;
         let memory = instance.exports.get_memory("memory")?.clone();
+        let initial_contents = memory.view(&mut store).copy_to_vec()?;
         Ok(VM {
             store,
             instance,
             memory,
+            initial_contents,
         })
     }
 
@@ -45,6 +50,13 @@ impl VM {
         }
         let delta_pages = (size - current_size) / WASM_PAGE_SIZE;
         self.memory.grow(&mut self.store, delta_pages as u32)?;
+        Ok(())
+    }
+
+    pub fn init_submemory(&mut self, slot: i32) -> anyhow::Result<()> {
+        let view = self.memory.view(&mut self.store);
+        let offset = slot as u64 * SUBMEMORY_SIZE;
+        view.write(offset, &self.initial_contents)?;
         Ok(())
     }
 }
