@@ -175,8 +175,13 @@ impl SavedValues {
     fn get(&self, store_kind: StoreKind) -> anyhow::Result<LocalId> {
         Ok(match store_kind {
             walrus::ir::StoreKind::I32 { .. } => self.val_i32,
-            walrus::ir::StoreKind::F32 => self.val_f32,
+            walrus::ir::StoreKind::I32_8 { .. } => self.val_i32,
+            walrus::ir::StoreKind::I32_16 { .. } => self.val_i32,
             walrus::ir::StoreKind::I64 { .. } => self.val_i64,
+            walrus::ir::StoreKind::I64_8 { .. } => self.val_i64,
+            walrus::ir::StoreKind::I64_16 { .. } => self.val_i64,
+            walrus::ir::StoreKind::I64_32 { .. } => self.val_i64,
+            walrus::ir::StoreKind::F32 => self.val_f32,
             walrus::ir::StoreKind::F64 { .. } => self.val_f64,
             _ => {
                 anyhow::bail!("unsupported store kind {:?}", store_kind);
