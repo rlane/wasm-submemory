@@ -2,6 +2,12 @@ use walrus::{ir::*, FunctionBuilder, GlobalId, InitExpr, LocalFunction, ValType}
 
 pub fn rewrite(wasm: &[u8], limit: i32) -> anyhow::Result<Vec<u8>> {
     let mut module = walrus::Module::from_buffer(wasm)?;
+
+    let num_mutable_globals = module.globals.iter().filter(|g| g.mutable).count();
+    if num_mutable_globals > 1 {
+        anyhow::bail!("wasm file has more than one mutable global");
+    }
+
     let base_global = module
         .globals
         .add_local(ValType::I32, true, InitExpr::Value(Value::I32(0)));

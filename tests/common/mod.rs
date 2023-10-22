@@ -60,14 +60,3 @@ impl VM {
         Ok(())
     }
 }
-
-pub fn returned_int(result: &[Value]) -> anyhow::Result<i32> {
-    match result.len() {
-        0 => anyhow::bail!("no return value"),
-        1 => match result[0] {
-            Value::I32(i) => Ok(i),
-            _ => anyhow::bail!("return value is not an i32"),
-        },
-        _ => anyhow::bail!("too many return values"),
-    }
-}

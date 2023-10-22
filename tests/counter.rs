@@ -57,12 +57,8 @@ fn i32_counter() -> TestResult {
         for i in 1..=10 {
             for j in 0..10 {
                 vm.call("set_base", &[Value::I32(j * SUBMEMORY_SIZE as i32)])?;
-                assert_eq!(
-                    returned_int(&vm.call("entry", &[])?)?,
-                    i,
-                    "{}",
-                    testcase.name
-                );
+                let ret = vm.call("entry", &[])?;
+                assert_eq!(*ret, [Value::I32(i as i32)], "{}", testcase.name);
             }
         }
     }
