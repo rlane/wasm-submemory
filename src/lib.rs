@@ -101,9 +101,9 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
         exempt_functions.push(id);
     }
 
-    // Create a fake_grow(i32) -> i32 function.
+    // Create a fake_memory_grow(i32) -> i32 function.
     // TODO return -1 if the submemory is full
-    let fake_grow = {
+    let fake_memory_grow = {
         let mut func = FunctionBuilder::new(&mut module.types, &[ValType::I32], &[ValType::I32]);
         let delta_pages = module.locals.add(ValType::I32);
         let addr = module.locals.add(ValType::I32);
@@ -140,7 +140,26 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
             // return prev_pages
             .local_get(prev_pages);
         let id = func.finish(vec![delta_pages], &mut module.funcs);
-        module.exports.add("fake_grow", id);
+        exempt_functions.push(id);
+        id
+    };
+
+    // Create a fake_memory_size() -> i32 function.
+    let fake_memory_size = {
+        let mut func = FunctionBuilder::new(&mut module.types, &[], &[ValType::I32]);
+        func.func_body()
+            .global_get(index_global)
+            .i32_const(4)
+            .binop(BinaryOp::I32Mul)
+            .load(
+                memory_id,
+                LoadKind::I32 { atomic: false },
+                MemArg {
+                    align: 4,
+                    offset: 0,
+                },
+            );
+        let id = func.finish(vec![], &mut module.funcs);
         exempt_functions.push(id);
         id
     };
@@ -150,7 +169,8 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
         base_global,
         submemory_size,
         saved_values,
-        fake_grow,
+        fake_memory_grow,
+        fake_memory_size,
     };
     for (id, func) in module.funcs.iter_local_mut() {
         if exempt_functions.contains(&id) {
@@ -166,7 +186,8 @@ struct Context {
     base_global: GlobalId,
     submemory_size: u64,
     saved_values: SavedValues,
-    fake_grow: FunctionId,
+    fake_memory_grow: FunctionId,
+    fake_memory_size: FunctionId,
 }
 
 fn rewrite_function(func: &mut LocalFunction, context: &Context) -> anyhow::Result<()> {
@@ -284,12 +305,17 @@ fn rewrite_block(
                 new_instrs.extend(bounds_checked_instrs.iter().cloned());
             }
             Instr::MemorySize(_) => {
-                todo!("memory size");
+                new_instrs.push((
+                    Instr::Call(Call {
+                        func: context.fake_memory_size,
+                    }),
+                    *instr_loc_id,
+                ));
             }
             Instr::MemoryGrow(_) => {
                 new_instrs.push((
                     Instr::Call(Call {
-                        func: context.fake_grow,
+                        func: context.fake_memory_grow,
                     }),
                     *instr_loc_id,
                 ));

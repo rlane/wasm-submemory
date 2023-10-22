@@ -11,10 +11,16 @@ struct Testcase<'a> {
 
 #[test]
 fn allocation() -> TestResult {
-    let testcases = &[Testcase {
-        name: "rust",
-        wasm: include_bytes!("../testdata/wasm/rust/allocation.wasm"),
-    }];
+    let testcases = &[
+        Testcase {
+            name: "rust",
+            wasm: include_bytes!("../testdata/wasm/rust/allocation.wasm"),
+        },
+        Testcase {
+            name: "zig",
+            wasm: include_bytes!("../testdata/wasm/zig/allocation.wasm"),
+        },
+    ];
 
     for testcase in testcases {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE)?;
