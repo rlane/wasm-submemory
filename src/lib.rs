@@ -1,5 +1,6 @@
 use walrus::{
-    ir::*, ActiveDataLocation, FunctionBuilder, GlobalId, InitExpr, LocalFunction, ValType,
+    ir::*, ActiveDataLocation, FunctionBuilder, FunctionId, GlobalId, InitExpr, LocalFunction,
+    ValType,
 };
 
 pub const WASM_PAGE_SIZE: u64 = 65536;
@@ -43,15 +44,7 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
         memory.initial += HEADROOM as u32 / WASM_PAGE_SIZE as u32;
     };
 
-    let saved_values = SavedValues::new(&mut module);
-    let context = Context {
-        base_global,
-        submemory_size,
-        saved_values,
-    };
-    for (_, func) in module.funcs.iter_local_mut() {
-        rewrite_function(func, &context)?;
-    }
+    let mut exempt_functions = Vec::new();
 
     // Create a select_submemory(index: i32) function.
     {
@@ -66,10 +59,9 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
             .i32_const(HEADROOM as i32 + initial_pages as i32 * WASM_PAGE_SIZE as i32)
             .binop(BinaryOp::I32Add)
             .global_set(base_global);
-        module.exports.add(
-            "select_submemory",
-            func.finish(vec![index], &mut module.funcs),
-        );
+        let id = func.finish(vec![index], &mut module.funcs);
+        module.exports.add("select_submemory", id);
+        exempt_functions.push(id);
     }
 
     // Create an add_submemory() -> i32 function.
@@ -104,9 +96,67 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
             .i32_const(1)
             .binop(BinaryOp::I32Add)
             .global_set(count_global);
-        module
-            .exports
-            .add("add_submemory", func.finish(vec![], &mut module.funcs));
+        let id = func.finish(vec![], &mut module.funcs);
+        module.exports.add("add_submemory", id);
+        exempt_functions.push(id);
+    }
+
+    // Create a fake_grow(i32) -> i32 function.
+    // TODO return -1 if the submemory is full
+    let fake_grow = {
+        let mut func = FunctionBuilder::new(&mut module.types, &[ValType::I32], &[ValType::I32]);
+        let delta_pages = module.locals.add(ValType::I32);
+        let addr = module.locals.add(ValType::I32);
+        let prev_pages = module.locals.add(ValType::I32);
+        func.func_body()
+            // addr = &allocated_pages[index]
+            .global_get(index_global)
+            .i32_const(4)
+            .binop(BinaryOp::I32Mul)
+            .local_tee(addr)
+            // prev_pages = *addr
+            .load(
+                memory_id,
+                LoadKind::I32 { atomic: false },
+                MemArg {
+                    align: 4,
+                    offset: 0,
+                },
+            )
+            .local_set(prev_pages)
+            // allocated_pages[index] += delta_pages
+            .local_get(addr)
+            .local_get(prev_pages)
+            .local_get(delta_pages)
+            .binop(BinaryOp::I32Add)
+            .store(
+                memory_id,
+                StoreKind::I32 { atomic: false },
+                MemArg {
+                    align: 4,
+                    offset: 0,
+                },
+            )
+            // return prev_pages
+            .local_get(prev_pages);
+        let id = func.finish(vec![delta_pages], &mut module.funcs);
+        module.exports.add("fake_grow", id);
+        exempt_functions.push(id);
+        id
+    };
+
+    let saved_values = SavedValues::new(&mut module);
+    let context = Context {
+        base_global,
+        submemory_size,
+        saved_values,
+        fake_grow,
+    };
+    for (id, func) in module.funcs.iter_local_mut() {
+        if exempt_functions.contains(&id) {
+            continue;
+        }
+        rewrite_function(func, &context)?;
     }
 
     Ok(module.emit_wasm())
@@ -116,6 +166,7 @@ struct Context {
     base_global: GlobalId,
     submemory_size: u64,
     saved_values: SavedValues,
+    fake_grow: FunctionId,
 }
 
 fn rewrite_function(func: &mut LocalFunction, context: &Context) -> anyhow::Result<()> {
@@ -236,7 +287,12 @@ fn rewrite_block(
                 todo!("memory size");
             }
             Instr::MemoryGrow(_) => {
-                todo!("memory grow");
+                new_instrs.push((
+                    Instr::Call(Call {
+                        func: context.fake_grow,
+                    }),
+                    *instr_loc_id,
+                ));
             }
             Instr::MemoryInit(_) => {
                 todo!("memory init");
