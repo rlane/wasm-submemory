@@ -169,3 +169,46 @@ fn i64_counter() -> TestResult {
 
     Ok(())
 }
+
+#[test]
+fn f64_counter() -> TestResult {
+    let wat_wasm = parse_wat(
+        r#"
+(module
+  (type (;0;) (func (result f64)))
+  (func $entry (type 0) (result f64)
+    (local f64)
+    i32.const 0
+    i32.const 0
+    f64.load offset=64
+    f64.const 1
+    f64.add
+    local.tee 0
+    f64.store offset=64
+    local.get 0)
+  (memory (;0;) 1)
+  (export "memory" (memory 0))
+  (export "entry" (func $entry)))
+            "#,
+    )?;
+
+    let testcases = &[Testcase {
+        name: "wat",
+        wasm: &wat_wasm,
+    }];
+
+    for testcase in testcases {
+        let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE as i32)?;
+        let mut vm = VM::new(&wasm)?;
+        vm.set_memory_size(10 * SUBMEMORY_SIZE)?;
+        for i in 1..=10 {
+            for j in 0..10 {
+                vm.call("set_base", &[Value::I32(j * SUBMEMORY_SIZE as i32)])?;
+                let ret = vm.call("entry", &[])?;
+                assert_eq!(*ret, [Value::F64(i as f64)], "{}", testcase.name);
+            }
+        }
+    }
+
+    Ok(())
+}
