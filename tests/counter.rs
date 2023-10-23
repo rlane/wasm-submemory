@@ -54,12 +54,11 @@ fn i32_counter() -> TestResult {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE)?;
         let mut vm = VM::new(&wasm)?;
         for i in 0..10 {
-            let ret = vm.call("add_submemory", &[])?;
-            assert_eq!(*ret, [Value::I32(i)], "{} {}", testcase.name, i);
+            assert_eq!(vm.add_submemory()?, i);
         }
         for i in 1..=10 {
             for j in 0..10 {
-                vm.call("select_submemory", &[Value::I32(j)])?;
+                vm.select_submemory(j)?;
                 let ret = vm.call("entry", &[])?;
                 assert_eq!(*ret, [Value::I32(i as i32)], "{} {}", testcase.name, i);
             }
@@ -114,12 +113,11 @@ fn f32_counter() -> TestResult {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE)?;
         let mut vm = VM::new(&wasm)?;
         for i in 0..10 {
-            let ret = vm.call("add_submemory", &[])?;
-            assert_eq!(*ret, [Value::I32(i)], "{} {}", testcase.name, i);
+            assert_eq!(vm.add_submemory()?, i);
         }
         for i in 1..=10 {
             for j in 0..10 {
-                vm.call("select_submemory", &[Value::I32(j)])?;
+                vm.select_submemory(j)?;
                 let ret = vm.call("entry", &[])?;
                 assert_eq!(*ret, [Value::F32(i as f32)], "{}", testcase.name);
             }
@@ -160,12 +158,11 @@ fn i64_counter() -> TestResult {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE)?;
         let mut vm = VM::new(&wasm)?;
         for i in 0..10 {
-            let ret = vm.call("add_submemory", &[])?;
-            assert_eq!(*ret, [Value::I32(i)], "{} {}", testcase.name, i);
+            assert_eq!(vm.add_submemory()?, i);
         }
         for i in 1..=10 {
             for j in 0..10 {
-                vm.call("select_submemory", &[Value::I32(j)])?;
+                vm.select_submemory(j)?;
                 let ret = vm.call("entry", &[])?;
                 assert_eq!(*ret, [Value::I64(i as i64)], "{}", testcase.name);
             }
@@ -206,12 +203,11 @@ fn i64_8_counter() -> TestResult {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE)?;
         let mut vm = VM::new(&wasm)?;
         for i in 0..10 {
-            let ret = vm.call("add_submemory", &[])?;
-            assert_eq!(*ret, [Value::I32(i)], "{} {}", testcase.name, i);
+            assert_eq!(vm.add_submemory()?, i);
         }
         for i in 1..=10 {
             for j in 0..10 {
-                vm.call("select_submemory", &[Value::I32(j)])?;
+                vm.select_submemory(j)?;
                 let ret = vm.call("entry", &[])?;
                 assert_eq!(*ret, [Value::I64(i as i64)], "{}", testcase.name);
             }
@@ -252,12 +248,11 @@ fn f64_counter() -> TestResult {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE)?;
         let mut vm = VM::new(&wasm)?;
         for i in 0..10 {
-            let ret = vm.call("add_submemory", &[])?;
-            assert_eq!(*ret, [Value::I32(i)], "{} {}", testcase.name, i);
+            assert_eq!(vm.add_submemory()?, i);
         }
         for i in 1..=10 {
             for j in 0..10 {
-                vm.call("select_submemory", &[Value::I32(j)])?;
+                vm.select_submemory(j)?;
                 let ret = vm.call("entry", &[])?;
                 assert_eq!(*ret, [Value::F64(i as f64)], "{}", testcase.name);
             }

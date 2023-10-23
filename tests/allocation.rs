@@ -26,11 +26,10 @@ fn allocation() -> TestResult {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE)?;
         let mut vm = VM::new(&wasm)?;
         for i in 0..10 {
-            let ret = vm.call("add_submemory", &[])?;
-            assert_eq!(*ret, [Value::I32(i)], "{} {}", testcase.name, i);
+            assert_eq!(vm.add_submemory()?, i);
         }
         for i in 0..10 {
-            vm.call("select_submemory", &[Value::I32(i)])?;
+            vm.select_submemory(i)?;
             let ret = vm.call("entry", &[])?;
             assert_eq!(*ret, [Value::I32(42)], "{} {}", testcase.name, i);
         }
