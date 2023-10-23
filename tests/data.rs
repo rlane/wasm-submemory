@@ -48,8 +48,7 @@ fn data() -> TestResult {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE)?;
         let mut vm = VM::new(&wasm)?;
         for i in 0..10 {
-            let ret = vm.call("add_submemory", &[])?;
-            assert_eq!(*ret, [Value::I32(i)], "{} {}", testcase.name, i);
+            assert_eq!(vm.add_submemory()?.0, i);
         }
         for i in 0..10 {
             vm.call("select_submemory", &[Value::I32(i)])?;
@@ -62,7 +61,7 @@ fn data() -> TestResult {
 }
 
 #[test]
-fn translate_pointer() -> TestResult {
+fn base_address() -> TestResult {
     let wat_wasm = parse_wat(
         r#"
 (module
@@ -87,13 +86,14 @@ fn translate_pointer() -> TestResult {
     for testcase in testcases {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE)?;
         let mut vm = VM::new(&wasm)?;
-        for i in 0..10 {
-            assert_eq!(vm.add_submemory()?, i);
+
+        let base_address = |i| WASM_PAGE_SIZE as i32 + (1 << 20) * (i + 1);
+        for i in 0..10i32 {
+            assert_eq!(vm.add_submemory()?, (i, base_address(i)));
         }
         for i in 0..10 {
             vm.select_submemory(i)?;
-            let offset = vm.translate_offset(offset)? as u32;
-            let ptr = WasmPtr::<i32>::new(offset);
+            let ptr = WasmPtr::<i32>::new((base_address(i) + offset) as u32);
             for j in 0..10 {
                 ptr.write(&vm.memory.view(&mut vm.store), 42 + j)?;
                 let ret = vm.call("entry", &[])?;

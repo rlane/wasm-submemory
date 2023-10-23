@@ -64,16 +64,19 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
         exempt_functions.push(id);
     }
 
-    // Create an add_submemory() -> i32 function.
+    // Create an add_submemory() -> (index: i32, base_address: i32) function.
     {
-        let mut func = FunctionBuilder::new(&mut module.types, &[], &[ValType::I32]);
+        let mut func = FunctionBuilder::new(&mut module.types, &[], &[ValType::I32, ValType::I32]);
+        let base_address = module.locals.add(ValType::I32);
         func.func_body()
             // prev_pages = memory.grow(submemory_size / WASM_PAGE_SIZE)
             .i32_const(submemory_size as i32 / WASM_PAGE_SIZE as i32)
             .memory_grow(memory_id)
-            // memory.copy(prev_pages * WASM_PAGE_SIZE, headroom, initial_pages * WASM_PAGE_SIZE)
+            // base_address = prev_pages * WASM_PAGE_SIZE
             .i32_const(WASM_PAGE_SIZE as i32)
             .binop(BinaryOp::I32Mul)
+            .local_tee(base_address)
+            // memory.copy(base_address, headroom, initial_pages * WASM_PAGE_SIZE)
             .i32_const(headroom as i32)
             .i32_const(initial_pages as i32 * WASM_PAGE_SIZE as i32)
             .memory_copy(memory_id, memory_id)
@@ -90,31 +93,15 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
                     offset: 0,
                 },
             )
-            // return count++
+            // return (count++, base_address)
             .global_get(count_global)
+            .local_get(base_address)
             .global_get(count_global)
             .i32_const(1)
             .binop(BinaryOp::I32Add)
             .global_set(count_global);
         let id = func.finish(vec![], &mut module.funcs);
         module.exports.add("add_submemory", id);
-        exempt_functions.push(id);
-    }
-
-    // Create a translate_offset(offset: i32) -> i32 function.
-    {
-        let mut func = FunctionBuilder::new(&mut module.types, &[ValType::I32], &[ValType::I32]);
-        let offset = module.locals.add(ValType::I32);
-        func.func_body()
-            .global_get(index_global)
-            .i32_const(submemory_size as i32)
-            .binop(BinaryOp::I32Mul)
-            .i32_const(headroom as i32 + initial_pages as i32 * WASM_PAGE_SIZE as i32)
-            .binop(BinaryOp::I32Add)
-            .local_get(offset)
-            .binop(BinaryOp::I32Add);
-        let id = func.finish(vec![offset], &mut module.funcs);
-        module.exports.add("translate_offset", id);
         exempt_functions.push(id);
     }
 

@@ -40,9 +40,9 @@ impl VM {
             .call(&mut self.store, args)?)
     }
 
-    pub fn add_submemory(&mut self) -> anyhow::Result<i32> {
+    pub fn add_submemory(&mut self) -> anyhow::Result<(i32, i32)> {
         match *self.call("add_submemory", &[])? {
-            [Value::I32(offset)] => Ok(offset),
+            [Value::I32(index), Value::I32(base_address)] => Ok((index, base_address)),
             _ => Err(anyhow::anyhow!("unexpected result from add_submemory")),
         }
     }
