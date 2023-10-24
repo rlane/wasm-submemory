@@ -2,7 +2,6 @@
 // TODO clean up integer types
 // TODO support vector instructions
 // TODO support memory instructions
-// TODO remove unwraps
 //
 // Memory layout:
 // 1 page submemory bookkeeping ("headroom")
@@ -38,15 +37,16 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
 
     let memory_id;
     let initial_pages;
-    {
-        let memory = module.memories.iter_mut().next().unwrap();
+    if let Some(memory) = module.memories.iter_mut().next() {
         memory.maximum = None;
         let data_segment_ids = memory.data_segments.iter().cloned().collect::<Vec<_>>();
         for id in data_segment_ids {
             match &mut module.data.get_mut(id).kind {
                 walrus::DataKind::Active(active) => match &mut active.location {
                     ActiveDataLocation::Absolute(ref mut offset) => *offset += HEADROOM_SIZE as u32,
-                    ActiveDataLocation::Relative(_) => todo!("relative data segment"),
+                    ActiveDataLocation::Relative(_) => {
+                        anyhow::bail!("unsupported relative data segment")
+                    }
                 },
                 _ => {}
             }
@@ -54,7 +54,9 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
         initial_pages = memory.initial as u64;
         memory_id = memory.id();
         memory.initial += HEADROOM_SIZE as u32 / WASM_PAGE_SIZE as u32;
-    };
+    } else {
+        anyhow::bail!("wasm file has no memory");
+    }
 
     let mut exempt_functions = Vec::new();
 
@@ -336,16 +338,10 @@ fn rewrite_block(
                     *instr_loc_id,
                 ));
             }
-            Instr::MemoryInit(_) => {
-                todo!("memory init");
-            }
-            Instr::MemoryCopy(_) => {
-                todo!("memory copy");
-            }
-            Instr::MemoryFill(_) => {
-                todo!("memory fill");
-            }
-            Instr::LoadSimd(_)
+            Instr::MemoryInit(_)
+            | Instr::MemoryCopy(_)
+            | Instr::MemoryFill(_)
+            | Instr::LoadSimd(_)
             | Instr::Cmpxchg(_)
             | Instr::AtomicRmw(_)
             | Instr::AtomicWait(_)
