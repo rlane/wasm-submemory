@@ -87,8 +87,8 @@ fn base_address() -> TestResult {
         let wasm = wasm_submemory::rewrite(testcase.wasm, SUBMEMORY_SIZE)?;
         let mut vm = VM::new(&wasm)?;
 
-        let base_address = |i| WASM_PAGE_SIZE as i32 * 2 + SUBMEMORY_SIZE as i32 * i;
-        for i in 0..10i32 {
+        let base_address = |i| WASM_PAGE_SIZE * 2 + SUBMEMORY_SIZE * i;
+        for i in 0..10 {
             assert_eq!(vm.add_submemory()?, (i, base_address(i)));
         }
         for i in 0..10 {

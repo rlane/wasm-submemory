@@ -1,5 +1,4 @@
 // TODO figure out if/when entry function runs
-// TODO clean up integer types
 // TODO support vector instructions
 // TODO support memory instructions
 //
@@ -14,10 +13,10 @@ use walrus::{
     ValType,
 };
 
-pub const WASM_PAGE_SIZE: u64 = 65536;
-pub const HEADROOM_SIZE: u64 = WASM_PAGE_SIZE;
+pub const WASM_PAGE_SIZE: u32 = 65536;
+pub const HEADROOM_SIZE: u32 = WASM_PAGE_SIZE;
 
-pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
+pub fn rewrite(wasm: &[u8], submemory_size: u32) -> anyhow::Result<Vec<u8>> {
     let mut module = walrus::Module::from_buffer(wasm)?;
 
     let num_mutable_globals = module.globals.iter().filter(|g| g.mutable).count();
@@ -51,7 +50,7 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
                 _ => {}
             }
         }
-        initial_pages = memory.initial as u64;
+        initial_pages = memory.initial as u32;
         memory_id = memory.id();
         memory.initial += HEADROOM_SIZE as u32 / WASM_PAGE_SIZE as u32;
     } else {
@@ -70,7 +69,7 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
             .local_get(index)
             .i32_const(submemory_size as i32)
             .binop(BinaryOp::I32Mul)
-            .i32_const(HEADROOM_SIZE as i32 + initial_pages as i32 * WASM_PAGE_SIZE as i32)
+            .i32_const((HEADROOM_SIZE + initial_pages * WASM_PAGE_SIZE) as i32)
             .binop(BinaryOp::I32Add)
             .global_set(base_global);
         let id = func.finish(vec![index], &mut module.funcs);
@@ -84,7 +83,7 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
         let base_address = module.locals.add(ValType::I32);
         func.func_body()
             // prev_pages = memory.grow(submemory_size / WASM_PAGE_SIZE)
-            .i32_const(submemory_size as i32 / WASM_PAGE_SIZE as i32)
+            .i32_const((submemory_size / WASM_PAGE_SIZE) as i32)
             .memory_grow(memory_id)
             // base_address = prev_pages * WASM_PAGE_SIZE
             .i32_const(WASM_PAGE_SIZE as i32)
@@ -92,7 +91,7 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
             .local_tee(base_address)
             // memory.copy(base_address, HEADROOM_SIZE, initial_pages * WASM_PAGE_SIZE)
             .i32_const(HEADROOM_SIZE as i32)
-            .i32_const(initial_pages as i32 * WASM_PAGE_SIZE as i32)
+            .i32_const((initial_pages * WASM_PAGE_SIZE) as i32)
             .memory_copy(memory_id, memory_id)
             // allocated_pages[count] = initial_pages
             .global_get(count_global)
@@ -202,7 +201,7 @@ pub fn rewrite(wasm: &[u8], submemory_size: u64) -> anyhow::Result<Vec<u8>> {
 
 struct Context {
     base_global: GlobalId,
-    submemory_size: u64,
+    submemory_size: u32,
     saved_values: SavedValues,
     fake_memory_grow: FunctionId,
     fake_memory_size: FunctionId,

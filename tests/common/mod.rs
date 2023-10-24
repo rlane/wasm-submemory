@@ -2,8 +2,8 @@
 
 use wasmer::{imports, Instance, Module, Store, Value};
 
-pub const WASM_PAGE_SIZE: u64 = 65536;
-pub const SUBMEMORY_SIZE: u64 = 1 << 20;
+pub const WASM_PAGE_SIZE: u32 = wasm_submemory::WASM_PAGE_SIZE;
+pub const SUBMEMORY_SIZE: u32 = 1 << 20;
 
 pub fn parse_wat(wat: &str) -> anyhow::Result<Vec<u8>> {
     Ok(wasmer::wat2wasm(wat.as_bytes())?.to_vec())
@@ -40,22 +40,17 @@ impl VM {
             .call(&mut self.store, args)?)
     }
 
-    pub fn add_submemory(&mut self) -> anyhow::Result<(i32, i32)> {
+    pub fn add_submemory(&mut self) -> anyhow::Result<(u32, u32)> {
         match *self.call("add_submemory", &[])? {
-            [Value::I32(index), Value::I32(base_address)] => Ok((index, base_address)),
+            [Value::I32(index), Value::I32(base_address)] => {
+                Ok((index as u32, base_address as u32))
+            }
             _ => Err(anyhow::anyhow!("unexpected result from add_submemory")),
         }
     }
 
-    pub fn select_submemory(&mut self, index: i32) -> anyhow::Result<()> {
-        self.call("select_submemory", &[Value::I32(index)])?;
+    pub fn select_submemory(&mut self, index: u32) -> anyhow::Result<()> {
+        self.call("select_submemory", &[Value::I32(index as i32)])?;
         Ok(())
-    }
-
-    pub fn translate_offset(&mut self, offset: i32) -> anyhow::Result<i32> {
-        match *self.call("translate_offset", &[Value::I32(offset)])? {
-            [Value::I32(offset)] => Ok(offset),
-            _ => Err(anyhow::anyhow!("translate_offset failed")),
-        }
     }
 }

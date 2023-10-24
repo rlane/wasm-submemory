@@ -9,7 +9,7 @@ struct Arguments {
 }
 
 fn main() -> anyhow::Result<()> {
-    let submemory_size: u64 = 1 << 20;
+    let submemory_size: u32 = 1 << 20;
     env_logger::init();
     let args = Arguments::parse();
     let wasm = std::fs::read(args.filename)?;
