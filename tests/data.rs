@@ -104,3 +104,43 @@ fn base_address() -> TestResult {
 
     Ok(())
 }
+
+#[test]
+fn reset() -> TestResult {
+    let wat_wasm = parse_wat(
+        r#"
+(module
+  (type (;0;) (func (result i32)))
+  (func $entry (type 0) (result i32)
+    (local i32)
+    i32.const 0
+    i32.const 0
+    i32.load offset=64
+    i32.const 1
+    i32.add
+    local.tee 0
+    i32.store offset=64
+    local.get 0)
+  (memory (;0;) 1)
+  (export "memory" (memory 0))
+  (export "entry" (func $entry)))
+            "#,
+    )?;
+
+    let wasm = wasm_submemory::rewrite(&wat_wasm, SUBMEMORY_SIZE)?;
+    let mut vm = VM::new(&wasm)?;
+
+    let base_address = WASM_PAGE_SIZE * 2;
+    assert_eq!(vm.add_submemory()?, (0, base_address));
+
+    for i in 0..2 {
+        vm.select_submemory(0)?;
+        let ret = vm.call("entry", &[])?;
+        assert_eq!(*ret, [Value::I32(1)], "{i}");
+        let ret = vm.call("entry", &[])?;
+        assert_eq!(*ret, [Value::I32(2)], "{i}");
+        vm.reset_submemory(0)?;
+    }
+
+    Ok(())
+}

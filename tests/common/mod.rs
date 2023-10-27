@@ -53,4 +53,9 @@ impl VM {
         self.call("select_submemory", &[Value::I32(index as i32)])?;
         Ok(())
     }
+
+    pub fn reset_submemory(&mut self, index: u32) -> anyhow::Result<()> {
+        self.call("reset_submemory", &[Value::I32(index as i32)])?;
+        Ok(())
+    }
 }

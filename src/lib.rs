@@ -118,6 +118,26 @@ pub fn rewrite(wasm: &[u8], submemory_size: u32) -> anyhow::Result<Vec<u8>> {
         exempt_functions.push(id);
     }
 
+    // Create a reset_submemory(index: i32) function.
+    {
+        let mut func = FunctionBuilder::new(&mut module.types, &[ValType::I32], &[]);
+        let index = module.locals.add(ValType::I32);
+        func.func_body()
+            // base_address = allocated_pages[index] * WASM_PAGE_SIZE
+            .local_get(index)
+            .i32_const(submemory_size as i32)
+            .binop(BinaryOp::I32Mul)
+            .i32_const((HEADROOM_SIZE + initial_pages * WASM_PAGE_SIZE) as i32)
+            .binop(BinaryOp::I32Add)
+            // memory.copy(base_address, HEADROOM_SIZE, initial_pages * WASM_PAGE_SIZE)
+            .i32_const(HEADROOM_SIZE as i32)
+            .i32_const((initial_pages * WASM_PAGE_SIZE) as i32)
+            .memory_copy(memory_id, memory_id);
+        let id = func.finish(vec![index], &mut module.funcs);
+        module.exports.add("reset_submemory", id);
+        exempt_functions.push(id);
+    }
+
     // Create a fake_memory_grow(i32) -> i32 function.
     // TODO return -1 if the submemory is full
     let fake_memory_grow = {
