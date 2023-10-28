@@ -37,6 +37,9 @@ pub fn rewrite(wasm: &[u8], submemory_size: u32) -> anyhow::Result<Vec<u8>> {
     let memory_id;
     let initial_pages;
     if let Some(memory) = module.memories.iter_mut().next() {
+        if memory.initial * WASM_PAGE_SIZE > submemory_size {
+            anyhow::bail!("wasm file's initial memory size ({} pages) is larger than submemory size ({} pages)", memory.initial, submemory_size / WASM_PAGE_SIZE);
+        }
         memory.maximum = None;
         let data_segment_ids = memory.data_segments.iter().cloned().collect::<Vec<_>>();
         for id in data_segment_ids {
