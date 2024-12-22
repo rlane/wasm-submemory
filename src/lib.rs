@@ -1,5 +1,5 @@
 // TODO figure out if/when entry function runs
-// TODO support vector instructions
+// TODO support more vector instructions (LoadSimd)
 // TODO support memory instructions
 //
 // Memory layout:
@@ -380,12 +380,12 @@ fn rewrite_block(
     Ok(())
 }
 
-// TODO need to support more types
 struct SavedValues {
     val_i32: LocalId,
     val_f32: LocalId,
     val_i64: LocalId,
     val_f64: LocalId,
+    val_v128: LocalId,
 }
 
 impl SavedValues {
@@ -395,6 +395,7 @@ impl SavedValues {
             val_f32: module.locals.add(ValType::F32),
             val_i64: module.locals.add(ValType::I64),
             val_f64: module.locals.add(ValType::F64),
+            val_v128: module.locals.add(ValType::V128),
         }
     }
 
@@ -409,9 +410,7 @@ impl SavedValues {
             walrus::ir::StoreKind::I64_32 { .. } => self.val_i64,
             walrus::ir::StoreKind::F32 => self.val_f32,
             walrus::ir::StoreKind::F64 { .. } => self.val_f64,
-            _ => {
-                anyhow::bail!("unsupported store kind {:?}", store_kind);
-            }
+            walrus::ir::StoreKind::V128 { .. } => self.val_v128,
         })
     }
 }
