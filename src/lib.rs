@@ -360,10 +360,163 @@ fn rewrite_block(
                     *instr_loc_id,
                 ));
             }
-            Instr::MemoryInit(_)
-            | Instr::MemoryCopy(_)
-            | Instr::MemoryFill(_)
-            | Instr::LoadSimd(_)
+            Instr::MemoryInit(init) => {
+                use walrus::ir::Value::*;
+                let size = context.saved_values.val_i32;
+                let source = context.saved_values.val_i32_2;
+                let dest = context.saved_values.val_i32_3;
+                let bounds_checked_instrs = &[
+                    (Instr::LocalSet(LocalSet { local: size }), InstrLocId::default()),
+                    (
+                        Instr::LocalSet(LocalSet { local: source }),
+                        InstrLocId::default(),
+                    ),
+                    (Instr::LocalSet(LocalSet { local: dest }), InstrLocId::default()),
+                    (Instr::LocalGet(LocalGet { local: dest }), InstrLocId::default()),
+                    (
+                        Instr::Const(Const {
+                            value: I32(mask as i32),
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::Binop(Binop {
+                            op: BinaryOp::I32And,
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::GlobalGet(GlobalGet {
+                            global: context.base_global,
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::Binop(Binop {
+                            op: BinaryOp::I32Add,
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::LocalGet(LocalGet { local: source }),
+                        InstrLocId::default(),
+                    ),
+                    (Instr::LocalGet(LocalGet { local: size }), InstrLocId::default()),
+                    (Instr::MemoryInit(init.clone()), *instr_loc_id),
+                ];
+                new_instrs.extend(bounds_checked_instrs.iter().cloned());
+            }
+            Instr::MemoryCopy(copy) => {
+                use walrus::ir::Value::*;
+                let size = context.saved_values.val_i32;
+                let source = context.saved_values.val_i32_2;
+                let dest = context.saved_values.val_i32_3;
+                let bounds_checked_instrs = &[
+                    (Instr::LocalSet(LocalSet { local: size }), InstrLocId::default()),
+                    (
+                        Instr::LocalSet(LocalSet { local: source }),
+                        InstrLocId::default(),
+                    ),
+                    (Instr::LocalSet(LocalSet { local: dest }), InstrLocId::default()),
+                    (Instr::LocalGet(LocalGet { local: dest }), InstrLocId::default()),
+                    (
+                        Instr::Const(Const {
+                            value: I32(mask as i32),
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::Binop(Binop {
+                            op: BinaryOp::I32And,
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::GlobalGet(GlobalGet {
+                            global: context.base_global,
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::Binop(Binop {
+                            op: BinaryOp::I32Add,
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::LocalGet(LocalGet { local: source }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::Const(Const {
+                            value: I32(mask as i32),
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::Binop(Binop {
+                            op: BinaryOp::I32And,
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::GlobalGet(GlobalGet {
+                            global: context.base_global,
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::Binop(Binop {
+                            op: BinaryOp::I32Add,
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (Instr::LocalGet(LocalGet { local: size }), InstrLocId::default()),
+                    (Instr::MemoryCopy(copy.clone()), *instr_loc_id),
+                ];
+                new_instrs.extend(bounds_checked_instrs.iter().cloned());
+            }
+            Instr::MemoryFill(fill) => {
+                use walrus::ir::Value::*;
+                let size = context.saved_values.val_i32;
+                let val = context.saved_values.val_i32_2;
+                let dest = context.saved_values.val_i32_3;
+                let bounds_checked_instrs = &[
+                    (Instr::LocalSet(LocalSet { local: size }), InstrLocId::default()),
+                    (Instr::LocalSet(LocalSet { local: val }), InstrLocId::default()),
+                    (Instr::LocalSet(LocalSet { local: dest }), InstrLocId::default()),
+                    (Instr::LocalGet(LocalGet { local: dest }), InstrLocId::default()),
+                    (
+                        Instr::Const(Const {
+                            value: I32(mask as i32),
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::Binop(Binop {
+                            op: BinaryOp::I32And,
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::GlobalGet(GlobalGet {
+                            global: context.base_global,
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::Binop(Binop {
+                            op: BinaryOp::I32Add,
+                        }),
+                        InstrLocId::default(),
+                    ),
+                    (Instr::LocalGet(LocalGet { local: val }), InstrLocId::default()),
+                    (Instr::LocalGet(LocalGet { local: size }), InstrLocId::default()),
+                    (Instr::MemoryFill(fill.clone()), *instr_loc_id),
+                ];
+                new_instrs.extend(bounds_checked_instrs.iter().cloned());
+            }
+            Instr::LoadSimd(_)
             | Instr::Cmpxchg(_)
             | Instr::AtomicRmw(_)
             | Instr::AtomicWait(_)
@@ -382,6 +535,8 @@ fn rewrite_block(
 
 struct SavedValues {
     val_i32: LocalId,
+    val_i32_2: LocalId,
+    val_i32_3: LocalId,
     val_f32: LocalId,
     val_i64: LocalId,
     val_f64: LocalId,
@@ -392,6 +547,8 @@ impl SavedValues {
     fn new(module: &mut walrus::Module) -> Self {
         Self {
             val_i32: module.locals.add(ValType::I32),
+            val_i32_2: module.locals.add(ValType::I32),
+            val_i32_3: module.locals.add(ValType::I32),
             val_f32: module.locals.add(ValType::F32),
             val_i64: module.locals.add(ValType::I64),
             val_f64: module.locals.add(ValType::F64),
