@@ -1,6 +1,5 @@
 // TODO figure out if/when entry function runs
 // TODO support more vector instructions (LoadSimd)
-// TODO support memory instructions
 //
 // Memory layout:
 // 1 page submemory bookkeeping ("headroom")
@@ -8,10 +7,7 @@
 // Submemory 0
 // ...
 // Submemory N
-use walrus::{
-    ir::*, ActiveDataLocation, FunctionBuilder, FunctionId, GlobalId, InitExpr, LocalFunction,
-    ValType,
-};
+use walrus::{ir::*, ConstExpr, FunctionBuilder, FunctionId, GlobalId, LocalFunction, ValType};
 
 pub const WASM_PAGE_SIZE: u32 = 65536;
 pub const HEADROOM_SIZE: u32 = WASM_PAGE_SIZE;
@@ -24,38 +20,39 @@ pub fn rewrite(wasm: &[u8], submemory_size: u32) -> anyhow::Result<Vec<u8>> {
         anyhow::bail!("wasm file has more than one mutable global");
     }
 
-    let base_global = module
-        .globals
-        .add_local(ValType::I32, true, InitExpr::Value(Value::I32(0)));
-    let index_global = module
-        .globals
-        .add_local(ValType::I32, true, InitExpr::Value(Value::I32(0)));
-    let count_global = module
-        .globals
-        .add_local(ValType::I32, true, InitExpr::Value(Value::I32(0)));
+    let base_global =
+        module
+            .globals
+            .add_local(ValType::I32, true, false, ConstExpr::Value(Value::I32(0)));
+    let index_global =
+        module
+            .globals
+            .add_local(ValType::I32, true, false, ConstExpr::Value(Value::I32(0)));
+    let count_global =
+        module
+            .globals
+            .add_local(ValType::I32, true, false, ConstExpr::Value(Value::I32(0)));
 
     let memory_id;
     let initial_pages;
     if let Some(memory) = module.memories.iter_mut().next() {
-        if memory.initial * WASM_PAGE_SIZE > submemory_size {
+        if memory.initial * (WASM_PAGE_SIZE as u64) > (submemory_size as u64) {
             anyhow::bail!("wasm file's initial memory size ({} pages) is larger than submemory size ({} pages)", memory.initial, submemory_size / WASM_PAGE_SIZE);
         }
         memory.maximum = None;
         let data_segment_ids = memory.data_segments.iter().cloned().collect::<Vec<_>>();
         for id in data_segment_ids {
             match &mut module.data.get_mut(id).kind {
-                walrus::DataKind::Active(active) => match &mut active.location {
-                    ActiveDataLocation::Absolute(ref mut offset) => *offset += HEADROOM_SIZE as u32,
-                    ActiveDataLocation::Relative(_) => {
-                        anyhow::bail!("unsupported relative data segment")
-                    }
+                walrus::DataKind::Active { offset: expr, .. } => match expr {
+                    ConstExpr::Value(Value::I32(val)) => *val += HEADROOM_SIZE as i32,
+                    _ => anyhow::bail!("unsupported data segment offset expression"),
                 },
                 _ => {}
             }
         }
         initial_pages = memory.initial as u32;
         memory_id = memory.id();
-        memory.initial += HEADROOM_SIZE as u32 / WASM_PAGE_SIZE as u32;
+        memory.initial += (HEADROOM_SIZE / WASM_PAGE_SIZE) as u64;
     } else {
         anyhow::bail!("wasm file has no memory");
     }
@@ -231,11 +228,29 @@ struct Context {
 }
 
 fn rewrite_function(func: &mut LocalFunction, context: &Context) -> anyhow::Result<()> {
-    let block_ids: Vec<_> = func.blocks().map(|(block_id, _block)| block_id).collect();
+    let mut block_ids = Vec::new();
+    collect_blocks(func, func.entry_block(), &mut block_ids);
+
     for block_id in block_ids {
         rewrite_block(func, block_id, context)?;
     }
     Ok(())
+}
+
+fn collect_blocks(func: &LocalFunction, start: InstrSeqId, out: &mut Vec<InstrSeqId>) {
+    out.push(start);
+    let block = func.block(start);
+    for (instr, _) in block.instrs.iter() {
+        match instr {
+            Instr::Block(b) => collect_blocks(func, b.seq, out),
+            Instr::Loop(l) => collect_blocks(func, l.seq, out),
+            Instr::IfElse(i) => {
+                collect_blocks(func, i.consequent, out);
+                collect_blocks(func, i.alternative, out);
+            }
+            _ => {}
+        }
+    }
 }
 
 fn rewrite_block(
@@ -247,7 +262,6 @@ fn rewrite_block(
     let block_instrs = &mut block.instrs;
     let mask = context.submemory_size - 1;
 
-    // TODO need to support more memory instructions
     let mut new_instrs: Vec<(Instr, InstrLocId)> = vec![];
     for (instr, instr_loc_id) in block_instrs.iter() {
         match instr {
@@ -366,13 +380,22 @@ fn rewrite_block(
                 let source = context.saved_values.val_i32_2;
                 let dest = context.saved_values.val_i32_3;
                 let bounds_checked_instrs = &[
-                    (Instr::LocalSet(LocalSet { local: size }), InstrLocId::default()),
+                    (
+                        Instr::LocalSet(LocalSet { local: size }),
+                        InstrLocId::default(),
+                    ),
                     (
                         Instr::LocalSet(LocalSet { local: source }),
                         InstrLocId::default(),
                     ),
-                    (Instr::LocalSet(LocalSet { local: dest }), InstrLocId::default()),
-                    (Instr::LocalGet(LocalGet { local: dest }), InstrLocId::default()),
+                    (
+                        Instr::LocalSet(LocalSet { local: dest }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::LocalGet(LocalGet { local: dest }),
+                        InstrLocId::default(),
+                    ),
                     (
                         Instr::Const(Const {
                             value: I32(mask as i32),
@@ -401,7 +424,10 @@ fn rewrite_block(
                         Instr::LocalGet(LocalGet { local: source }),
                         InstrLocId::default(),
                     ),
-                    (Instr::LocalGet(LocalGet { local: size }), InstrLocId::default()),
+                    (
+                        Instr::LocalGet(LocalGet { local: size }),
+                        InstrLocId::default(),
+                    ),
                     (Instr::MemoryInit(init.clone()), *instr_loc_id),
                 ];
                 new_instrs.extend(bounds_checked_instrs.iter().cloned());
@@ -412,13 +438,22 @@ fn rewrite_block(
                 let source = context.saved_values.val_i32_2;
                 let dest = context.saved_values.val_i32_3;
                 let bounds_checked_instrs = &[
-                    (Instr::LocalSet(LocalSet { local: size }), InstrLocId::default()),
+                    (
+                        Instr::LocalSet(LocalSet { local: size }),
+                        InstrLocId::default(),
+                    ),
                     (
                         Instr::LocalSet(LocalSet { local: source }),
                         InstrLocId::default(),
                     ),
-                    (Instr::LocalSet(LocalSet { local: dest }), InstrLocId::default()),
-                    (Instr::LocalGet(LocalGet { local: dest }), InstrLocId::default()),
+                    (
+                        Instr::LocalSet(LocalSet { local: dest }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::LocalGet(LocalGet { local: dest }),
+                        InstrLocId::default(),
+                    ),
                     (
                         Instr::Const(Const {
                             value: I32(mask as i32),
@@ -471,7 +506,10 @@ fn rewrite_block(
                         }),
                         InstrLocId::default(),
                     ),
-                    (Instr::LocalGet(LocalGet { local: size }), InstrLocId::default()),
+                    (
+                        Instr::LocalGet(LocalGet { local: size }),
+                        InstrLocId::default(),
+                    ),
                     (Instr::MemoryCopy(copy.clone()), *instr_loc_id),
                 ];
                 new_instrs.extend(bounds_checked_instrs.iter().cloned());
@@ -482,10 +520,22 @@ fn rewrite_block(
                 let val = context.saved_values.val_i32_2;
                 let dest = context.saved_values.val_i32_3;
                 let bounds_checked_instrs = &[
-                    (Instr::LocalSet(LocalSet { local: size }), InstrLocId::default()),
-                    (Instr::LocalSet(LocalSet { local: val }), InstrLocId::default()),
-                    (Instr::LocalSet(LocalSet { local: dest }), InstrLocId::default()),
-                    (Instr::LocalGet(LocalGet { local: dest }), InstrLocId::default()),
+                    (
+                        Instr::LocalSet(LocalSet { local: size }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::LocalSet(LocalSet { local: val }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::LocalSet(LocalSet { local: dest }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::LocalGet(LocalGet { local: dest }),
+                        InstrLocId::default(),
+                    ),
                     (
                         Instr::Const(Const {
                             value: I32(mask as i32),
@@ -510,8 +560,14 @@ fn rewrite_block(
                         }),
                         InstrLocId::default(),
                     ),
-                    (Instr::LocalGet(LocalGet { local: val }), InstrLocId::default()),
-                    (Instr::LocalGet(LocalGet { local: size }), InstrLocId::default()),
+                    (
+                        Instr::LocalGet(LocalGet { local: val }),
+                        InstrLocId::default(),
+                    ),
+                    (
+                        Instr::LocalGet(LocalGet { local: size }),
+                        InstrLocId::default(),
+                    ),
                     (Instr::MemoryFill(fill.clone()), *instr_loc_id),
                 ];
                 new_instrs.extend(bounds_checked_instrs.iter().cloned());
